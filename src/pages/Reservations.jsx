@@ -15,6 +15,8 @@ const Reservations = () => {
         occasion: 'none',
         specialRequests: ''
     })
+    const [errors, setErrors] = useState({})
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     useEffect(() => {
         // When the component mounts, fetch available times for today
@@ -22,12 +24,64 @@ const Reservations = () => {
         fetchAPI(today).then(times => setAvailableTimes(times))
     }, [])
 
+    const validateField = (name, value) => {
+        switch (name) {
+            case 'name':
+                return value.length < 2 ? 'Name must be at least 2 characters long' : ''
+            case 'email':
+                return !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? 'Please enter a valid email address' : ''
+            case 'phone':
+                return !/^\+?[\d\s-]{10,}$/.test(value) ? 'Please enter a valid phone number' : ''
+            case 'date':
+                const selectedDate = new Date(value)
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                return selectedDate < today ? 'Please select a future date' : ''
+            case 'time':
+                return !value ? 'Please select a time' : ''
+            case 'guests':
+                const numGuests = parseInt(value)
+                return numGuests < 1 || numGuests > 8 ? 'Number of guests must be between 1 and 8' : ''
+            default:
+                return ''
+        }
+    }
+
+    const validateForm = () => {
+        const newErrors = {}
+        Object.keys(formData).forEach(key => {
+            if (key !== 'specialRequests' && key !== 'occasion') { // These fields are optional
+                const error = validateField(key, formData[key])
+                if (error) newErrors[key] = error
+            }
+        })
+        setErrors(newErrors)
+        return Object.keys(newErrors).length === 0
+    }
+
     const handleChange = async (e) => {
         const { name, value } = e.target
         setFormData(prevState => ({
             ...prevState,
             [name]: value
         }))
+
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors(prev => ({
+                ...prev,
+                [name]: ''
+            }))
+        }
+
+        // Validate field on change
+        const error = validateField(name, value)
+        if (error) {
+            setErrors(prev => ({
+                ...prev,
+                [name]: error
+            }))
+        }
 
         // If date changes, fetch new available times
         if (name === 'date') {
@@ -37,8 +91,26 @@ const Reservations = () => {
         }
     }
 
+    const handleBlur = (e) => {
+        const { name, value } = e.target
+        const error = validateField(name, value)
+        if (error) {
+            setErrors(prev => ({
+                ...prev,
+                [name]: error
+            }))
+        }
+    }
+
     const handleSubmit = async (e) => {
         e.preventDefault()
+        setIsSubmitting(true)
+
+        if (!validateForm()) {
+            setIsSubmitting(false)
+            return
+        }
+
         try {
             const success = await submitAPI(formData)
             if (success) {
@@ -46,8 +118,23 @@ const Reservations = () => {
             }
         } catch (error) {
             console.error('Error submitting booking:', error)
-            // Handle error - you might want to show an error message to the user
+            setErrors(prev => ({
+                ...prev,
+                submit: 'Failed to submit booking. Please try again.'
+            }))
+        } finally {
+            setIsSubmitting(false)
         }
+    }
+
+    const isFormValid = () => {
+        return Object.keys(errors).length === 0 &&
+            formData.name &&
+            formData.email &&
+            formData.phone &&
+            formData.date &&
+            formData.time &&
+            formData.guests
     }
 
     return (
@@ -63,7 +150,13 @@ const Reservations = () => {
                         </p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-lg shadow">
+                    {errors.submit && (
+                        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+                            {errors.submit}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-8 bg-white p-8 rounded-lg shadow" noValidate>
                         <div className="space-y-6">
                             {/* Personal Information */}
                             <div>
@@ -78,10 +171,17 @@ const Reservations = () => {
                                             name="name"
                                             id="name"
                                             required
+                                            minLength="2"
+                                            pattern="[A-Za-z\s]+"
                                             value={formData.name}
                                             onChange={handleChange}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            onBlur={handleBlur}
+                                            className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.name ? 'true' : 'false'}
                                         />
+                                        {errors.name && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -95,8 +195,13 @@ const Reservations = () => {
                                             required
                                             value={formData.email}
                                             onChange={handleChange}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            onBlur={handleBlur}
+                                            className={`mt-1 block w-full border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.email ? 'true' : 'false'}
                                         />
+                                        {errors.email && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -108,10 +213,16 @@ const Reservations = () => {
                                             name="phone"
                                             id="phone"
                                             required
+                                            pattern="[\d\s-+]+"
                                             value={formData.phone}
                                             onChange={handleChange}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            onBlur={handleBlur}
+                                            className={`mt-1 block w-full border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.phone ? 'true' : 'false'}
                                         />
+                                        {errors.phone && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -131,9 +242,14 @@ const Reservations = () => {
                                             required
                                             value={formData.date}
                                             onChange={handleChange}
+                                            onBlur={handleBlur}
                                             min={new Date().toISOString().split('T')[0]}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            className={`mt-1 block w-full border ${errors.date ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.date ? 'true' : 'false'}
                                         />
+                                        {errors.date && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.date}</p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -146,7 +262,9 @@ const Reservations = () => {
                                             required
                                             value={formData.time}
                                             onChange={handleChange}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            onBlur={handleBlur}
+                                            className={`mt-1 block w-full border ${errors.time ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.time ? 'true' : 'false'}
                                         >
                                             <option value="">Select a time</option>
                                             {availableTimes.map(time => (
@@ -155,6 +273,9 @@ const Reservations = () => {
                                                 </option>
                                             ))}
                                         </select>
+                                        {errors.time && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.time}</p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -167,12 +288,17 @@ const Reservations = () => {
                                             required
                                             value={formData.guests}
                                             onChange={handleChange}
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                                            onBlur={handleBlur}
+                                            className={`mt-1 block w-full border ${errors.guests ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500`}
+                                            aria-invalid={errors.guests ? 'true' : 'false'}
                                         >
                                             {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
                                                 <option key={num} value={num}>{num} {num === 1 ? 'Guest' : 'Guests'}</option>
                                             ))}
                                         </select>
+                                        {errors.guests && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.guests}</p>
+                                        )}
                                     </div>
 
                                     <div>
@@ -208,18 +334,26 @@ const Reservations = () => {
                                     rows={4}
                                     value={formData.specialRequests}
                                     onChange={handleChange}
+                                    maxLength={500}
                                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                     placeholder="Any dietary restrictions or special requests?"
                                 />
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {formData.specialRequests.length}/500 characters
+                                </p>
                             </div>
                         </div>
 
                         <div className="pt-5">
                             <button
                                 type="submit"
-                                className="w-full bg-yellow-500 text-white py-3 px-6 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors duration-200"
+                                disabled={!isFormValid() || isSubmitting}
+                                className={`w-full py-3 px-6 rounded-md text-white transition-colors duration-200 ${isFormValid() && !isSubmitting
+                                    ? 'bg-yellow-500 hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500'
+                                    : 'bg-gray-400 cursor-not-allowed'
+                                    }`}
                             >
-                                Confirm Reservation
+                                {isSubmitting ? 'Confirming...' : 'Confirm Reservation'}
                             </button>
                         </div>
                     </form>
