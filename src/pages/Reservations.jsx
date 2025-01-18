@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { fetchAPI, submitAPI } from '../api/bookingApi'
 
 const Reservations = () => {
+    const navigate = useNavigate()
+    const [availableTimes, setAvailableTimes] = useState([])
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -12,19 +16,38 @@ const Reservations = () => {
         specialRequests: ''
     })
 
-    const handleChange = (e) => {
+    useEffect(() => {
+        // When the component mounts, fetch available times for today
+        const today = new Date()
+        fetchAPI(today).then(times => setAvailableTimes(times))
+    }, [])
+
+    const handleChange = async (e) => {
         const { name, value } = e.target
         setFormData(prevState => ({
             ...prevState,
             [name]: value
         }))
+
+        // If date changes, fetch new available times
+        if (name === 'date') {
+            const selectedDate = new Date(value)
+            const times = await fetchAPI(selectedDate)
+            setAvailableTimes(times)
+        }
     }
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        // Handle form submission here
-        console.log('Reservation details:', formData)
-        // Reset form or show confirmation
+        try {
+            const success = await submitAPI(formData)
+            if (success) {
+                navigate('/booking-confirmed')
+            }
+        } catch (error) {
+            console.error('Error submitting booking:', error)
+            // Handle error - you might want to show an error message to the user
+        }
     }
 
     return (
@@ -108,6 +131,7 @@ const Reservations = () => {
                                             required
                                             value={formData.date}
                                             onChange={handleChange}
+                                            min={new Date().toISOString().split('T')[0]}
                                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                         />
                                     </div>
@@ -125,15 +149,11 @@ const Reservations = () => {
                                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                                         >
                                             <option value="">Select a time</option>
-                                            <option value="17:00">5:00 PM</option>
-                                            <option value="17:30">5:30 PM</option>
-                                            <option value="18:00">6:00 PM</option>
-                                            <option value="18:30">6:30 PM</option>
-                                            <option value="19:00">7:00 PM</option>
-                                            <option value="19:30">7:30 PM</option>
-                                            <option value="20:00">8:00 PM</option>
-                                            <option value="20:30">8:30 PM</option>
-                                            <option value="21:00">9:00 PM</option>
+                                            {availableTimes.map(time => (
+                                                <option key={time} value={time}>
+                                                    {time.replace(':', ':')} {parseInt(time) >= 12 ? 'PM' : 'AM'}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
 
